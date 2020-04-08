@@ -15,9 +15,10 @@ class QQTensor(object):
      
     def __repr__(self):
         text = []
+
+        text.append('======================================')
         text.append('Tensor Name: {}'.format(self.name))
-        
-        text.append('--------------------------------------')
+        text.append('======================================')
 
         text.append('Weights:')
         for w in self.weight:
@@ -33,6 +34,8 @@ class QQTensor(object):
 
         text.append('Out:')
         text.append(str(self.out))
+
+        text.append('======================================')
         return '\n'.join(text)
 
     def __call__(self):

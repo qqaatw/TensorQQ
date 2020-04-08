@@ -1,8 +1,9 @@
 # TODO: Check RMSProp optimizer
 #
 
-import TensorQQ
 import numpy as np
+
+import TensorQQ
 
 w_1 = TensorQQ.QQTensor.QQParameter([[0.2358, 0.2746], 
                                      [0.2789, 0.3586],
@@ -47,6 +48,6 @@ for ep in range(5000):
     loss.backward()
     optimizer_sgd.update(loss, 1)
 
-#print(layer1)
-#print(layer2)
+print(layer1)
+print(layer2)
 print('Done.')
