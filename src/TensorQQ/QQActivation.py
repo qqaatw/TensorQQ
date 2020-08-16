@@ -1,9 +1,49 @@
-from TensorQQ.QQTensor import QQTensor
+from TensorQQ.QQTensor import QQBase, QQTensor
 import numpy as np
 
-class QQActivation(QQTensor):
+
+class QQActivation:
+    """Abstract activation class.
+
+    Parameters
+    ----------
+    name : str
+        Tenser name.
+    """
+
+    def __init__(self, name):
+        self._name = name
+
+    def __call__(self, op, x):
+        return QQTensor._op(op, x, name=self._name)
+
+
+class QQReLU(QQActivation):
+    """Rectified Linear Unit (ReLU) activation.
+
+    Parameters
+    ----------
+    name : str, optional
+        Tensor name.
+    """
+
+    def __init__(self, name=None):
+        super().__init__(name)
+
+    def __call__(self, x):
+        return super().__call__('relu', x)
+
+class QQActivation_deprecated(QQBase):
+    """Abstract activation class.
+
+    Parameters
+    ----------
+    name : str
+        Tenser name.
+    """
+
     def __init__(self, name='undefined'):
-        super(QQActivation, self).__init__(None, name)
+        super().__init__(name)
     
     def __call__(self, x):
         if not self._initialized:
@@ -18,12 +58,21 @@ class QQActivation(QQTensor):
     def shape(self):
         return self.out.shape
 
-class QQReLU(QQActivation):
+
+class QQReLU_deprecated(QQActivation_deprecated):
+    """Rectified Linear Unit (ReLU) activation.
+
+    Parameters
+    ----------
+    name : str, optional
+        Tensor name.
+    """
+
     def __init__(self, name = 'undefined'):
-        super(QQReLU, self).__init__(name)
+        super().__init__(name)
 
     def __call__(self, x):
-        super(QQReLU, self).__call__(x)
+        super().__call__(x)
         self.out = np.maximum(np.zeros(x.out.shape), x.out)
         return self
     
@@ -34,12 +83,20 @@ class QQReLU(QQActivation):
         return np.dot(x_out, self.x['x'].backward(partial))
 
 
-class QQSigmoid(QQActivation):
+class QQSigmoid_deprecated(QQActivation_deprecated):
+    """Sigmoid activation, also called logistic function.
+
+    Parameters
+    ----------
+    name : str, optional
+        Tensor name.
+    """
+
     def __init__(self, name='undefined'):
-        super(QQSigmoid, self).__init__(name)
+        super().__init__(name)
 
     def __call__(self, x):
-        super(QQSigmoid, self).__call__(x)
+        super().__call__(x)
         self.out = 1 / (1 + np.exp(-x.out))
         return self
 
@@ -47,14 +104,22 @@ class QQSigmoid(QQActivation):
         return np.dot((self.out * (1 - self.out)), self.x['x'].backward(partial))
 
 
-class QQTanh(QQActivation):
+class QQTanh_deprecated(QQActivation_deprecated):
+    """Hyperbolic tangent (Tanh) activation.
+
+    Parameters
+    ----------
+    name : str, optional
+        Tensor name.
+    """
+
     def __init__(self, name='undefined'):
-        super(QQTanh, self).__init__(name)
+        super().__init__(name)
 
     def __call__(self, x):
-        super(QQTanh, self).__call__(x)
+        super().__call__(x)
         self.out = (np.exp(x.out) - np.exp(-x.out)) / (np.exp(x.out) + np.exp(-x.out))
         return self
 
     def backward(self, partial=None):
-        return 1 - np.power(self.out, 2)
+        return np.dot(1 - np.power(self.out, 2), self.x['x'].backward(partial))
