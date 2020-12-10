@@ -1,4 +1,4 @@
-from TensorQQ.QQTensor import QQBase, QQTensor
+from .QQTensor import QQBase, QQTensor
 import numpy as np
 
 
@@ -8,7 +8,7 @@ class QQActivation:
     Parameters
     ----------
     name : str
-        Tenser name.
+        Tensor name.
     """
 
     def __init__(self, name):
@@ -16,6 +16,22 @@ class QQActivation:
 
     def __call__(self, op, x):
         return QQTensor._op(op, x, name=self._name)
+
+
+class QQSigmoid(QQActivation):
+    """Sigmoid activation, also called logistic function.
+
+    Parameters
+    ----------
+    name : str, optional
+        Tensor name.
+    """
+
+    def __init__(self, name=None):
+        super().__init__(name)
+
+    def __call__(self, x):
+        return super().__call__('sigmoid', x)
 
 
 class QQReLU(QQActivation):

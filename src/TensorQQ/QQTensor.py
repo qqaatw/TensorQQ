@@ -4,8 +4,9 @@ import warnings
 
 import numpy as np
 
-from TensorQQ.QQOperator import auto_forward, auto_backward, ops_list, shared_mul_div
-from TensorQQ.QQInitializer import QQInitializer
+from .ops.QQOperator import auto_forward, auto_backward
+from .QQInitializer import QQInitializer
+from .QQSetting import *
 
 class QQBase(object):
     """Abstract base class, providing tensor attributes, representaiton and functions. 
@@ -139,15 +140,15 @@ class QQParameter(QQBase):
     def shape(self):
         return self.weight.shape
 
-class QQTensor(object):
-    """Tensor object used by TensorQQ
+class QQTensor:
+    """Tensor object used by TensorQQ.
 
     Parameters
     ----------
     v : float
         Computed tensor value.
     op : str, optional
-        Operator name, by default None.
+        Operator name, by default "param".
     parent : Tuple of QQTensors, optional
         (Parent1, Parent2), by default None.
     differentiable : bool, optional
@@ -155,15 +156,6 @@ class QQTensor(object):
     name : str, optional
         Tensor name, by default "undefined".
     """
-    
-    # Basic Operators
-    # param : parameter itself
-    # add   : addition
-    # sub   : subtration
-    # mul   : multiplicaiton
-    # div   : division
-    basic_op = ['param', 'add', 'sub', 'mul', 'div']
-    
 
     def __init__(self, v, op='param', parents=None, differentiable=True, name='undefined'):
         assert isinstance(parents, tuple) or parents is None, \
@@ -175,35 +167,14 @@ class QQTensor(object):
             for parent in parents:
                 self._params_pool.extend(parent.params)
 
-        if not isinstance(v, np.ndarray):
-            v = np.array(v, dtype='float32')
-
-        self._value = v
+        self._differentiable = differentiable
         self._gradient = None
+        self._gradient_internal = None
+        self._name = name
         self._operator = op
         self._parent = parents
-        self._differentiable = differentiable
-        self._name = name
-
-    # Operators
-    @classmethod
-    def _op(cls, op_name, *args, name=None):
-        assert all([isinstance(arg, QQTensor) for arg in args]), \
-            "Arguments of operator should be an instance of `QQTensor` : {}".format([type(arg.v) for arg in args])
-
-        if name is None:
-            name = '{}_{}'.format(op_name, '_'.join([arg.name for arg in args]))
-
-        if op_name == 'add':
-            return cls(args[0].v + args[1].v, op_name, (args[0], args[1]), name=name)
-        elif op_name == 'sub':
-            return cls(args[0].v - args[1].v, op_name, (args[0], args[1]), name=name)
-        elif op_name == 'mul':
-            return cls(args[0].v * args[1].v, op_name, (args[0], args[1]), name=name)
-        elif op_name == 'div':
-            return cls(args[0].v / args[1].v, op_name, (args[0], args[1]), name=name)
-        else:
-            return cls(auto_forward(op_name, *args), op_name, args, name=name)
+        self._value = np.array(v, dtype=TENSORQQ_DTYPE) if not isinstance(v, np.ndarray) else v
+        self.reset_internal()
 
     def __add__(self, other):
         return self._op('add', self, other)
@@ -229,95 +200,301 @@ class QQTensor(object):
     def __idiv__(self, other):
         return self._op('div', self, other)
 
+    def __matmul__(self, other):
+        return self._op('matmul', self, other)
+
+    # Operators
+
+    @classmethod
+    def _op(cls, op_name, *args, name=None):
+        """Run operator (forward propagation).
+
+        Parameters
+        ----------
+        op_name : str
+            Operator's name.
+        args : QQTensors
+            Arguments of QQTensor.
+        name : str, optional
+            The name of result tensor, by default None.
+
+        Returns
+        -------
+        QQTensor
+            Result tensor.
+        """
+
+        assert all([isinstance(arg, QQTensor) for arg in args]), \
+            "Arguments of operator should be an instance of `QQTensor` : {}".format([type(arg.v) for arg in args])
+
+        if name is None:
+            name = '{}<{}>'.format(op_name, ','.join([arg.name for arg in args]))
+
+        return cls(auto_forward(op_name, *args), op_name, args, name=name)
+
+    def _handle_gradient_internal(self):
+        if self._gradient_internal['count'] >= 1:
+            self._gradient = x.dot(
+                np.ones((self._gradient.shape[-1], self._gradient.shape[-1])))
+            self._gradient_internal['count'] = 0
+                    
     @staticmethod
     def matmul(x1, x2):
         return QQTensor._op('matmul', x1, x2)
 
     # End of Operators
 
+    # Properties
+
     @property
     def T(self):
-        """Transpose value.
+        """Obtain transposed tensor.
 
         Returns
         -------
         array-like
-            Transposed value.
+            Transposed tensor.
         """
         
-        self._value = self._value.T
-        return self
+        return self._op("transpose", self)
 
     @property
     def v(self):
+        """Tensor's value, alias of QQTensor._value.
+
+        Returns
+        -------
+        numpy.ndarray
+            Tensor's value.
+        """
+
         return self._value
-    
+
+    @v.setter
+    def v(self, x):
+        """Setter of tensor's value.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Value.
+        """
+
+        assert isinstance(x, np.ndarray)
+        self._value = x
+
     @property
     def grad(self):
+        """Tensor's gradient, alias of QQTensor._gradient.
+
+        Returns
+        -------
+        numpy.ndarray
+            Tensor's gradient.
+        """
+        
         return self._gradient
+
+    @grad.setter
+    def grad(self, x):
+        """Setter of tensor's gradient.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Gradient value.
+        """
+
+        assert isinstance(x, np.ndarray) or isinstance(x,)
+        
+        self._gradient = x
+
+    @property
+    def diff(self):
+        """Whether tensor is differentiable, alias of QQTensor._differentiable.
+
+        Returns
+        -------
+        bool
+            A boolean which indicates tensor is differentiable.
+        """
+
+        return self._differentiable
+
+    @property
+    def ndim(self):
+        """Tensor's number of dimention.
+
+        Returns
+        -------
+        int
+            Number of dimention.
+        """
+
+        return np.ndim(self._value)
 
     @property
     def name(self):
+        """Tensor's name, alias of QQTensor._name.
+
+        Returns
+        -------
+        str
+            Tensor's name.
+        """
+
         return self._name
     
     @property
+    def op(self):
+        """Tensor's operator name, alias of QQTensor._operator
+
+        Returns
+        -------
+        str
+            Tensor's operator name.
+        """
+        return self._operator
+
+    @property
     def params(self):
+        """Tensor's parameters list, alias of QQTensor._params_pool.
+
+        Returns
+        -------
+        list
+            Tensor's parameters list.
+        """
+
         return self._params_pool
 
     @property
+    def parents(self):
+        """Tensor's parents list, alias of QQTensor._parent.
+
+        Returns
+        -------
+        list
+            Tensor's parents list.
+        """
+        return self._parent
+
+    @property
     def shape(self):
+        """Tensor's shape, alias of QQTensor._value.shape.
+
+        Returns
+        -------
+        Tuple
+            Tensor's shape.
+        """
+
         return self._value.shape
 
+    # End of Properties
+
     def backward(self, partial=None):
+        """Perform backward propagation.
+
+        Parameters
+        ----------
+        partial : QQTensor, optional
+            Parameter that you want to obtain the gradient, 
+            if not given, compute all gradients from this tensor, 
+            by default None.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Computed gradient. If partial is not given, return None.
+        """
+
+        def handle_backward(param):
+            # If self is not a scalar, it will compute the dot product with a one-lile output.
+            # To sum all the value along batch axis.
+            if not param.diff:
+                return
+                
+            rt = self._backward(param)
+
+            if rt.grad.ndim == 0:
+                rt.grad = np.ones(param.shape) * self.shape[0]
+            elif param.ndim == 1:
+                rt.grad = np.dot(rt.grad.T, np.ones((self.shape[0], 1))).reshape(-1)
+            #elif rt._gradient_internal['count'] < 2:
+            #    rt.grad = rt.grad.dot(np.ones_like(self.v))
+            else:
+                rt.grad = rt.grad
+            
+            rt.reset_internal()
+
         if partial is None:
+            grad_list = []
             for param in self._params_pool:
-                param._gradient = self._backward(param)
-            return None
+                handle_backward(param)
+                grad_list.append(param.grad)
+            return grad_list
         else:
-            partial._gradient = self._backward(partial)
-            return partial._gradient
+            handle_backward(partial)
+            return partial.grad
 
     def _backward(self, partial):
+        """Internal recursive function for backwarding.
+
+        Parameters
+        ----------
+        partial : QQTensor
+            The tensor you want to obtain the partial derivatives.
+
+        Returns
+        -------
+        numpy.ndarray or 0
+            Computed gradient. If the tensor isn't differentiable, return 0.
+        """
+
         if not self._differentiable:
-            return 0
+            return self
         elif self._differentiable and self is partial:
-            return np.ones(self.shape, dtype='float32')
+            self._gradient = np.array(1., dtype=TENSORQQ_DTYPE)
+            self._gradient_internal['internal'] = True
+            self._gradient_internal['count'] += 1
+            return self
 
-        if self._operator in QQTensor.basic_op:
-            if self._operator == 'param':
-                return 0
-            elif self._operator == 'add':
-                return self._parent[0]._backward(partial) + self._parent[1]._backward(partial)
-            elif self._operator == 'sub':
-                return self._parent[0]._backward(partial) - self._parent[1]._backward(partial)
-            elif self._operator == 'mul':
-                grad_p0, grad_p1 = shared_mul_div(partial, self._parent[0], self._parent[1])
-                return grad_p0 * grad_p1
-            elif self._operator == 'div':
-                grad_p0, grad_p1 = shared_mul_div(partial, self._parent[0], self._parent[1])
-                return grad_p0 / grad_p1
+        if self._operator == 'param':
+            return self
         else:
-            return auto_backward(self._operator, partial, *self._parent)
+            return auto_backward(self._operator, partial, self)
 
+    def reset_internal(self):
+        self._gradient_internal = {'count': 0, 'internal': False}
 
 class QQTrainer(object):
     pass
 
-class QQFullyConnection(object):
-    def __init__(self, weight : QQTensor, bias : QQTensor, *args):
+class QQFullyConnection:
+    """Fully-connection, also called affine transform.
+        Formula: Y = X W.T + B
+
+    Parameters
+    ----------
+    weight : QQTensor
+        Weight of FC.
+    bias : QQTensor
+        Bias of FC.
+    use_bias : bool
+        Whether to use bias.
+    """
+
+    def __init__(self, weight : QQTensor, bias : QQTensor, use_bias : bool):
         self.weight = weight
         self.bias = bias
+        self.use_bias = use_bias
 
     def __call__(self, x):
-        return QQTensor.matmul(x, self.weight.T) + self.bias
-
-
-def test_QQTenser():
-    weight = QQTensor(np.random.normal(size=(5, 2)))
-    bias = QQTensor(np.random.normal(size=(5, 1)))
-    X = QQTensor(np.random.normal(size=(2, 1)), differentiable=False)
-    fc = QQFullyConnection(weight, bias)
-    return fc, fc(X), X
+        if self.use_bias:
+            return QQTensor.matmul(x, self.weight) + self.bias
+        else:
+            return QQTensor.matmul(x, self.weight)
 
 if __name__ == "__main__":
     pass

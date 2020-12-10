@@ -1,4 +1,4 @@
-from TensorQQ.QQTensor import QQBase
+from .QQTensor import QQBase
 import numpy as np
 
 class QQLoss(QQBase):

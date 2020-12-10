@@ -4,8 +4,8 @@ from .QQTensor import QQBase
 from .QQTensor import QQParameter
 from .QQTensor import QQTensor
 from .QQTensor import QQFullyConnection
-from TensorQQ import QQActivation
-from TensorQQ import QQOperator
+from . import QQActivation
+from . import QQUtility
 import numpy as np
 
 
@@ -53,52 +53,66 @@ class QQDense(QQLayer):
     weight_initializer : QQInitializer, optional
         Weight initializer, by default None.
     bias_initializer : QQInitializer, optional
-        Bias initializer, if not given and weight_initializer is given, uses weight_initializer, by default None.
+        Bias initializer, 
+        if bias_initializer is not given but weight_initializer is given, 
+        uses weight_initializer instead, by default None.
+    use_bias : bool, optional
+        Whether to use bias.
     name : str, optional
         Custom layer name, by default 'undefined'.
     """
 
-    def __init__(self, unit, weight=None, bias=None, weight_initializer=None, bias_initializer=None, name='undefined'):
+    def __init__(self, unit, weight=None, bias=None, weight_initializer=None, use_bias=True, bias_initializer=None, name='undefined'):
         super(QQDense, self).__init__(unit, name)
         self.weight['weight_1'] = weight
         self.bias['bias_1'] = bias
         self.weight_initializer = weight_initializer
         self.bias_initializer = weight_initializer if not bias_initializer and weight_initializer else bias_initializer
+        self.use_bias = use_bias
         self.fc = None
 
     def __call__(self, x):
-        super(QQDense, self).__call__(x)
+        super().__call__(x)
         self.out = self.fc(x)
         return self.out
 
     def init(self, x):
         self._initialized = True
-        if self.weight_initializer:
-            if self.weight['weight_1']:
-                assert self.weight['weight_1'].shape == (self.unit, x.shape[0]),\
-                    '{}\'s weight has an invalid shape.'.format(self.name)
-            else:
+        if self.weight['weight_1'] is None:
+            if self.weight_initializer:
                 self.weight['weight_1'] = QQTensor(
-                    self.weight_initializer((self.unit, x.shape[0])),
+                    self.weight_initializer((self.unit, x.shape[1])),
                     name='{}_{}'.format(self.name, 'weight_1')
                 )
-            if self.bias['bias_1']:
-                assert self.bias['bias_1'].shape == (self.unit, 1),\
-                    '{}\'s bias has an invalid shape.'.format(self.name)
             else:
+                raise RuntimeError('Weight initializer is not given!')
+
+        if self.use_bias and self.bias['bias_1'] is None:
+            if self.bias_initializer:
                 self.bias['bias_1'] = QQTensor(
-                    self.bias_initializer((self.unit, 1)),
+                    self.bias_initializer((self.unit,)),
                     name='{}_{}'.format(self.name, 'bias_1')
                 )
-        elif self.weight['weight_1'] is None or self.bias['bias_1'] is None:
-            raise ValueError(
-                '{}\'s weight or bias has not been initialized!'.format(self.name))
+            else:
+                self.bias['bias_1'] = QQTensor(
+                    self.weight_initializer((self.unit,)),
+                    name='{}_{}'.format(self.name, 'bias_1')
+                )
 
-        if not isinstance(self.weight['weight_1'], QQTensor)\
-                or not isinstance(self.bias['bias_1'], QQTensor):
-            raise TypeError(
-                '{}\'s weight or bias is not a QQTensor instance'.format(self.name))
-        self.fc = QQFullyConnection(self.weight['weight_1'], self.bias['bias_1'])
+        #elif self.weight['weight_1'] is None or self.bias['bias_1'] is None:
+        #    raise ValueError(
+        #        '{}\'s weight or bias has not been initialized!'.format(self.name))
+        assert isinstance(self.weight['weight_1'], QQTensor), \
+            '{}\'s weight is not a QQTensor instance.'.format(self.name)
+        assert self.weight['weight_1'].shape == (x.shape[1], self.unit),\
+            '{}\'s weight has an invalid shape: {}.'.format(self.name, self.weight['weight_1'].shape)
+        if self.use_bias:
+            assert isinstance(self.bias['bias_1'], QQTensor), \
+                '{}\'s bias is not a QQTensor instance.'.format(self.name)
+            assert self.bias['bias_1'].shape == (self.unit,),\
+                '{}\'s bias has an invalid shape: {}.'.format(self.name, self.bias['bias_1'].shape)
+            
+        self.fc = QQFullyConnection(self.weight['weight_1'], self.bias['bias_1'], use_bias=self.use_bias)
 
 
 class QQDense_deprecated(QQLayer):
@@ -127,7 +141,7 @@ class QQDense_deprecated(QQLayer):
         super().__call__(x)
         #self.out = np.matmul(
         #    self.weight['weight_1'].weight, x.out) + self.bias['bias_1'].weight
-        self.out = QQOperator.fc(x=x.out, weight=self.weight['weight_1'].weight, bias=self.bias['bias_1'].weight)
+        self.out = QQUtility.fc(x=x.out, weight=self.weight['weight_1'].weight, bias=self.bias['bias_1'].weight)
         return self
 
     def backward(self, partial=None):

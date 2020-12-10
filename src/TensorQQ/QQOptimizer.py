@@ -1,5 +1,6 @@
 import numpy as np
-from .QQOperator import sqrt
+
+from .QQUtility import sqrt
 
 class QQOptimizer(object):
     def __init__(self, lr):
