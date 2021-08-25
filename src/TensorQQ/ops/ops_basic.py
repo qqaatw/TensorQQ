@@ -27,7 +27,7 @@ def shared_mul_div(partial, st):
     # Gradients exist
     if any((exist_0, exist_1)):
         if all((exist_0, exist_1)):
-            raise AssertionError('The circumstance of parameters sharing. Currently under development, check first.')
+            raise AssertionError('The circumstance of parameters sharing. Currently under development.')
             return st.parents[0].v.T * st.parents[1].v.T
         
         
@@ -35,13 +35,15 @@ def shared_mul_div(partial, st):
             # A@B'
             rt = st.parents[1]._backward(partial) # rt = partial 
             A = st.parents[0].v
+            #A = st.v
             B = rt.grad
-            rt.grad = np.dot(A.T, B) # x @ W=1
+            rt.grad = np.dot(A.T, B) # x @ W = 1
         else:
             # A'@B
             rt = st.parents[0]._backward(partial)
             A = rt.grad
             B = st.parents[1].v
+            #B = st.v
             rt.grad = np.dot(A, B.T)
         
         return rt

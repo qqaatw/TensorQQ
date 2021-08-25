@@ -224,8 +224,8 @@ class QQTensor:
             Result tensor.
         """
 
-        assert all([isinstance(arg, QQTensor) for arg in args]), \
-            "Arguments of operator should be an instance of `QQTensor` : {}".format([type(arg.v) for arg in args])
+        assert all(isinstance(arg, QQTensor) for arg in args), \
+            "Arguments of operator should be an instance of `QQTensor` : {}".format(type(arg.v) for arg in args)
 
         if name is None:
             name = '{}<{}>'.format(op_name, ','.join([arg.name for arg in args]))
@@ -410,7 +410,7 @@ class QQTensor:
         """
 
         def handle_backward(param):
-            # If self is not a scalar, it will compute the dot product with a one-lile output.
+            # If self is not a scalar, it will compute the dot product with an one-like output.
             # To sum all the value along batch axis.
             if not param.diff:
                 return
@@ -429,12 +429,14 @@ class QQTensor:
             rt.reset_internal()
 
         if partial is None:
+            # Compute all gradients w.r.t self tensor.
             grad_list = []
             for param in self._params_pool:
                 handle_backward(param)
                 grad_list.append(param.grad)
             return grad_list
         else:
+            # Compute partial gradient only.
             handle_backward(partial)
             return partial.grad
 
